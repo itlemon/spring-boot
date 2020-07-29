@@ -34,8 +34,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class AvailabilityProbesAutoConfigurationTests {
 
-	private ApplicationContextRunner contextRunner = new ApplicationContextRunner().withConfiguration(AutoConfigurations
-			.of(ApplicationAvailabilityAutoConfiguration.class, AvailabilityProbesAutoConfiguration.class));
+	private ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+			.withConfiguration(AutoConfigurations.of(ApplicationAvailabilityAutoConfiguration.class,
+					AvailabilityHealthContributorAutoConfiguration.class, AvailabilityProbesAutoConfiguration.class));
 
 	@Test
 	void probesWhenNotKubernetesAddsNoBeans() {
@@ -56,7 +57,7 @@ class AvailabilityProbesAutoConfigurationTests {
 
 	@Test
 	void probesWhenPropertyEnabledAddsBeans() {
-		this.contextRunner.withPropertyValues("management.health.probes.enabled=true")
+		this.contextRunner.withPropertyValues("management.endpoint.health.probes.enabled=true")
 				.run((context) -> assertThat(context).hasSingleBean(ApplicationAvailability.class)
 						.hasSingleBean(LivenessStateHealthIndicator.class)
 						.hasSingleBean(ReadinessStateHealthIndicator.class)
@@ -66,7 +67,8 @@ class AvailabilityProbesAutoConfigurationTests {
 	@Test
 	void probesWhenKubernetesAndPropertyDisabledAddsNotBeans() {
 		this.contextRunner
-				.withPropertyValues("spring.main.cloud-platform=kubernetes", "management.health.probes.enabled=false")
+				.withPropertyValues("spring.main.cloud-platform=kubernetes",
+						"management.endpoint.health.probes.enabled=false")
 				.run((context) -> assertThat(context).hasSingleBean(ApplicationAvailability.class)
 						.doesNotHaveBean(LivenessStateHealthIndicator.class)
 						.doesNotHaveBean(ReadinessStateHealthIndicator.class)

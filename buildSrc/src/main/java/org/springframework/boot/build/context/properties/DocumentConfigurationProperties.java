@@ -19,11 +19,13 @@ package org.springframework.boot.build.context.properties;
 import java.io.File;
 import java.io.IOException;
 
+import org.gradle.api.DefaultTask;
 import org.gradle.api.Task;
 import org.gradle.api.file.FileCollection;
-import org.gradle.api.internal.AbstractTask;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 
 import org.springframework.boot.build.context.properties.DocumentOptions.Builder;
@@ -33,13 +35,14 @@ import org.springframework.boot.build.context.properties.DocumentOptions.Builder
  *
  * @author Andy Wilkinson
  */
-public class DocumentConfigurationProperties extends AbstractTask {
+public class DocumentConfigurationProperties extends DefaultTask {
 
 	private FileCollection configurationPropertyMetadata;
 
 	private File outputDir;
 
 	@InputFiles
+	@PathSensitive(PathSensitivity.RELATIVE)
 	public FileCollection getConfigurationPropertyMetadata() {
 		return this.configurationPropertyMetadata;
 	}
@@ -77,8 +80,8 @@ public class DocumentConfigurationProperties extends AbstractTask {
 				.addSection("security").withKeyPrefixes("spring.security", "spring.ldap", "spring.session")
 				.addSection("data-migration").withKeyPrefixes("spring.flyway", "spring.liquibase").addSection("data")
 				.withKeyPrefixes("spring.couchbase", "spring.elasticsearch", "spring.h2", "spring.influx",
-						"spring.mongodb", "spring.redis", "spring.dao", "spring.data", "spring.datasource",
-						"spring.jooq", "spring.jdbc", "spring.jpa", "spring.r2dbc")
+						"spring.mongodb", "spring.neo4j", "spring.redis", "spring.dao", "spring.data",
+						"spring.datasource", "spring.jooq", "spring.jdbc", "spring.jpa", "spring.r2dbc")
 				.addOverride("spring.datasource.dbcp2",
 						"Commons DBCP2 specific settings bound to an instance of DBCP2's BasicDataSource")
 				.addOverride("spring.datasource.tomcat",

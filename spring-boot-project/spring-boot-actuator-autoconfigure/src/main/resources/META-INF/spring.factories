@@ -2,6 +2,7 @@ org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
 org.springframework.boot.actuate.autoconfigure.amqp.RabbitHealthContributorAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.audit.AuditAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.audit.AuditEventsEndpointAutoConfiguration,\
+org.springframework.boot.actuate.autoconfigure.availability.AvailabilityHealthContributorAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.availability.AvailabilityProbesAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.beans.BeansEndpointAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.cache.CachesEndpointAutoConfiguration,\
@@ -14,6 +15,7 @@ org.springframework.boot.actuate.autoconfigure.context.properties.ConfigurationP
 org.springframework.boot.actuate.autoconfigure.context.ShutdownEndpointAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.couchbase.CouchbaseHealthContributorAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.couchbase.CouchbaseReactiveHealthContributorAutoConfiguration,\
+org.springframework.boot.actuate.autoconfigure.elasticsearch.ElasticSearchReactiveHealthContributorAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.elasticsearch.ElasticSearchRestHealthContributorAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.endpoint.EndpointAutoConfiguration,\
 org.springframework.boot.actuate.autoconfigure.endpoint.jmx.JmxEndpointAutoConfiguration,\

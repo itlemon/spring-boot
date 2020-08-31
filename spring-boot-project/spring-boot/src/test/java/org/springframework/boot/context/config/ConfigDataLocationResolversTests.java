@@ -23,10 +23,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.logging.DeferredLogFactory;
@@ -45,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
  * @author Phillip Webb
  * @author Madhura Bhave
  */
+@ExtendWith(MockitoExtension.class)
 class ConfigDataLocationResolversTests {
 
 	private DeferredLogFactory logFactory = Supplier::get;
@@ -60,15 +61,11 @@ class ConfigDataLocationResolversTests {
 
 	private ResourceLoader resourceLoader = new DefaultResourceLoader();
 
-	@BeforeEach
-	void setup() {
-		MockitoAnnotations.initMocks(this);
-	}
-
 	@Test
 	void createWhenInjectingBinderCreatesResolver() {
-		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory, this.binder,
-				this.resourceLoader, Collections.singletonList(TestBoundResolver.class.getName()));
+		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory,
+				ConfigDataLocationNotFoundAction.FAIL, this.binder, this.resourceLoader,
+				Collections.singletonList(TestBoundResolver.class.getName()));
 		assertThat(resolvers.getResolvers()).hasSize(1);
 		assertThat(resolvers.getResolvers().get(0)).isExactlyInstanceOf(TestBoundResolver.class);
 		assertThat(((TestBoundResolver) resolvers.getResolvers().get(0)).getBinder()).isSameAs(this.binder);
@@ -76,8 +73,9 @@ class ConfigDataLocationResolversTests {
 
 	@Test
 	void createWhenNotInjectingBinderCreatesResolver() {
-		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory, this.binder,
-				this.resourceLoader, Collections.singletonList(TestResolver.class.getName()));
+		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory,
+				ConfigDataLocationNotFoundAction.FAIL, this.binder, this.resourceLoader,
+				Collections.singletonList(TestResolver.class.getName()));
 		assertThat(resolvers.getResolvers()).hasSize(1);
 		assertThat(resolvers.getResolvers().get(0)).isExactlyInstanceOf(TestResolver.class);
 	}
@@ -85,7 +83,8 @@ class ConfigDataLocationResolversTests {
 	@Test
 	void createWhenNameIsNotConfigDataLocationResolverThrowsException() {
 		assertThatIllegalArgumentException()
-				.isThrownBy(() -> new ConfigDataLocationResolvers(this.logFactory, this.binder, this.resourceLoader,
+				.isThrownBy(() -> new ConfigDataLocationResolvers(this.logFactory,
+						ConfigDataLocationNotFoundAction.FAIL, this.binder, this.resourceLoader,
 						Collections.singletonList(InputStream.class.getName())))
 				.withMessageContaining("Unable to instantiate").havingCause().withMessageContaining("not assignable");
 	}
@@ -96,8 +95,8 @@ class ConfigDataLocationResolversTests {
 		names.add(TestResolver.class.getName());
 		names.add(LowestTestResolver.class.getName());
 		names.add(HighestTestResolver.class.getName());
-		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory, this.binder,
-				this.resourceLoader, names);
+		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory,
+				ConfigDataLocationNotFoundAction.FAIL, this.binder, this.resourceLoader, names);
 		assertThat(resolvers.getResolvers().get(0)).isExactlyInstanceOf(HighestTestResolver.class);
 		assertThat(resolvers.getResolvers().get(1)).isExactlyInstanceOf(TestResolver.class);
 		assertThat(resolvers.getResolvers().get(2)).isExactlyInstanceOf(LowestTestResolver.class);
@@ -105,8 +104,8 @@ class ConfigDataLocationResolversTests {
 
 	@Test
 	void resolveAllResolvesUsingFirstSupportedResolver() {
-		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory, this.binder,
-				this.resourceLoader,
+		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory,
+				ConfigDataLocationNotFoundAction.FAIL, this.binder, this.resourceLoader,
 				Arrays.asList(LowestTestResolver.class.getName(), HighestTestResolver.class.getName()));
 		List<ConfigDataLocation> resolved = resolvers.resolveAll(this.context,
 				Collections.singletonList("LowestTestResolver:test"), null);
@@ -119,8 +118,8 @@ class ConfigDataLocationResolversTests {
 
 	@Test
 	void resolveAllWhenProfileMergesResolvedLocations() {
-		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory, this.binder,
-				this.resourceLoader,
+		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory,
+				ConfigDataLocationNotFoundAction.FAIL, this.binder, this.resourceLoader,
 				Arrays.asList(LowestTestResolver.class.getName(), HighestTestResolver.class.getName()));
 		List<ConfigDataLocation> resolved = resolvers.resolveAll(this.context,
 				Collections.singletonList("LowestTestResolver:test"), this.profiles);
@@ -137,8 +136,8 @@ class ConfigDataLocationResolversTests {
 
 	@Test
 	void resolveWhenNoResolverThrowsException() {
-		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory, this.binder,
-				this.resourceLoader,
+		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory,
+				ConfigDataLocationNotFoundAction.FAIL, this.binder, this.resourceLoader,
 				Arrays.asList(LowestTestResolver.class.getName(), HighestTestResolver.class.getName()));
 		assertThatExceptionOfType(UnsupportedConfigDataLocationException.class)
 				.isThrownBy(() -> resolvers.resolveAll(this.context, Collections.singletonList("Missing:test"), null))
@@ -155,13 +154,14 @@ class ConfigDataLocationResolversTests {
 		}
 
 		@Override
-		public List<TestConfigDataLocation> resolve(ConfigDataLocationResolverContext context, String location) {
+		public List<TestConfigDataLocation> resolve(ConfigDataLocationResolverContext context, String location,
+				boolean optional) {
 			return Collections.singletonList(new TestConfigDataLocation(this, location, false));
 		}
 
 		@Override
 		public List<TestConfigDataLocation> resolveProfileSpecific(ConfigDataLocationResolverContext context,
-				String location, Profiles profiles) {
+				String location, boolean optional, Profiles profiles) {
 			return Collections.singletonList(new TestConfigDataLocation(this, location, true));
 		}
 

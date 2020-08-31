@@ -538,6 +538,9 @@ Or you could supply the JSON by using a command line argument:
 
 If you are deploying to a classic Application Server, you could also use a JNDI variable named `java:comp/env/spring.application.json`.
 
+NOTE: Although `null` values from the JSON will be added to the resulting property source, the `PropertySourcesPropertyResolver` treats `null` properties as missing values.
+This means that the JSON cannot override properties from lower order property sources with a `null` value.
+
 
 
 [[boot-features-external-config-application-property-files]]
@@ -567,8 +570,10 @@ The following example shows how to specify two locations:
 
 [indent=0]
 ----
-	$ java -jar myproject.jar --spring.config.location=classpath:/default.properties,classpath:/override.properties
+	$ java -jar myproject.jar --spring.config.location=optional:classpath:/default.properties,optional:classpath:/override.properties
 ----
+
+TIP: Use the prefix `optional:` if the <<boot-features-external-config-optional-prefix,locations are optional>> and you don't mind if they don't exist.
 
 WARNING: `spring.config.name` and `spring.config.location` are used very early to determine which files have to be loaded.
 They must be defined as an environment property (typically an OS environment variable, a system property, or a command-line argument).
@@ -581,22 +586,22 @@ Typical extensions that are supported out-of-the-box are `.properties`, `.yaml`,
 When multiple locations are specified, the later ones can override the values of earlier ones.
 
 Locations configured by using `spring.config.location` replace the default locations.
-For example, if `spring.config.location` is configured with the value `classpath:/custom-config/,file:./custom-config/`, the complete set of locations considered is:
+For example, if `spring.config.location` is configured with the value `optional:classpath:/custom-config/,optional:file:./custom-config/`, the complete set of locations considered is:
 
-. `classpath:custom-config/`
-. `file:./custom-config/`
+. `optional:classpath:custom-config/`
+. `optional:file:./custom-config/`
 
 If you prefer to add addition locations, rather than replacing them, you can use `spring.config.additional-location`.
 Properties loaded from additional locations can override those in the default locations.
-For example, if `spring.config.additional-location` is configured with the value `classpath:/custom-config/,file:./custom-config/`, the complete the complete set of locations considered is:
+For example, if `spring.config.additional-location` is configured with the value `optional:classpath:/custom-config/,optional:file:./custom-config/`, the complete the complete set of locations considered is:
 
-. `classpath:/`
-. `classpath:/config/`
-. `file:./`
-. `file:./config/*/`
-. `file:./config/`
-. `classpath:custom-config/`
-. `file:./custom-config/`
+. `optional:classpath:/`
+. `optional:classpath:/config/`
+. `optional:file:./`
+. `optional:file:./config/*/`
+. `optional:file:./config/`
+. `optional:classpath:custom-config/`
+. `optional:file:./custom-config/`
 
 This search ordering lets you specify default values in one configuration file and then selectively override those values in another.
 You can provide default values for your application in `application.properties` (or whatever other basename you choose with `spring.config.name`) in one of the default locations.
@@ -606,6 +611,20 @@ NOTE: If you use environment variables rather than system properties, most opera
 See <<boot-features-external-config-relaxed-binding-from-environment-variables>> for details.
 
 NOTE: If your application runs in a servlet container or application server, then JNDI properties (in `java:comp/env`) or servlet context initialization parameters can be used instead of, or as well as, environment variables or system properties.
+
+
+
+[[boot-features-external-config-optional-prefix]]
+==== Optional Locations
+By default, when a specified config data location does not exist, Spring Boot will throw a `ConfigDataLocationNotFoundException` and your application will not start.
+
+If you want to specify a location, but you don't mind if it doesn't always exist, you can use the `optional:` prefix.
+You can use this prefix with the `spring.config.location` and `spring.config.additional-location` properties, as well as with <<boot-features-external-config-files-importing, `spring.config.import`>> declarations.
+
+For example, a `spring.config.import` value of `optional:file:./myconfig.properties` allows your application to start, even if the `myconfig.properties` file is missing.
+
+If you want to ignore all `ConfigDataLocationNotFoundExceptions` and always continue to start your application, you can use the `spring.config.on-location-not-found` property.
+Set the value to `ignore` using `SpringApplication.setDefaultProperties(...)` or with a system/environment variable.
 
 
 
@@ -633,7 +652,7 @@ You cannot use a wildcard in a `classpath:` location.
 
 
 [[boot-features-external-config-files-profile-specific]]
-==== Profile Specific Files[[boot-features-external-config-profile-specific-properties]]
+==== Profile Specific Files
 As well as `application` property files, Spring Boot will also attempt to load profile-specific files using the naming convention `application-\{profile}`.
 For example, if your application activates a profile named `prod` and uses YAML files, then both `application.yml` and `application-prod.yml` will be considered.
 
@@ -659,7 +678,7 @@ For example, you might have the following in your classpath `application.propert
 [source,properties,indent=0]
 ----
 	spring.application.name=myapp
-	spring.config.import=file:./dev.properties
+	spring.config.import=optional:file:./dev.properties
 ----
 
 This will trigger the import of a `dev.properties` file in current directory (if such a file exists).
@@ -672,7 +691,7 @@ Locations will be processed in the order that they are defined, with later impor
 [TIP]
 ====
 Spring Boot includes pluggable API that allows various different location addresses to be supported.
-By default you can import Java Properties, YAML and volume mounts.
+By default you can import Java Properties, YAML and "`<<boot-features-external-config-files-configtree, configuration trees>>`".
 
 Third-party jars can offer support for additional technologies (there's no requirement for files to be local).
 For example, you can imagine config data being from external stores such as Consul, Apache ZooKeeper or Netflix Archaius.
@@ -682,8 +701,23 @@ If you want to support your own locations, see the `ConfigDataLocationResolver` 
 
 
 
-[[boot-features-external-config-files-voumemounts]]
-==== Using Volume Mount Properties
+==== Importing Extensionless Files
+Some cloud platforms cannot add a file extension to volume mounted files.
+To import these extensionless files, you need to give Spring Boot a hint so that it knows how to load them.
+You can do this by putting an extension hint in square brackets.
+
+For example, suppose you have a `/etc/config/myconfig` file that you wish to import as yaml.
+You can import it from your `application.properties` using the following:
+
+[source,properties,indent=0]
+----
+	spring.config.import=file:/etc/config/myconfig[.yaml]
+----
+
+
+
+[[boot-features-external-config-files-configtree]]
+==== Using Configuration Trees
 When running applications on a cloud platform (such as Kubernetes) you often need to read config values that the platform supplies.
 It's not uncommon to use environment variables for such purposes, but this can have drawbacks, especially if the value is supposed to be kept secret.
 
@@ -693,10 +727,10 @@ For example, Kubernetes can volume mount both https://kubernetes.io/docs/tasks/c
 There are two common volume mount patterns that can be use:
 
 . A single file contains a complete set of properties (usually written as YAML).
-. Multiple files are written to a directory with the filename becoming the '`key`' and the contents becoming the '`value`'.
+. Multiple files are written to a directory tree, with the filename becoming the '`key`' and the contents becoming the '`value`'.
 
 For the first case, you can import the YAML or Properties file directly using `spring.config.import` as described <<boot-features-external-config-files-importing,above>>.
-For the second case, you need to use the `volumemount:` prefix so that Spring Boot knows it needs to expose all the files as properties.
+For the second case, you need to use the `configtree:` prefix so that Spring Boot knows it needs to expose all the files as properties.
 
 As an example, let's imagine that Kubernetes has mounted the following volume:
 
@@ -715,12 +749,12 @@ To import these properties, you can add the following to your `application.prope
 
 [source,properties,indent=0]
 ----
-spring.config.import=volumemount:/etc/config
+spring.config.import=optional:configtree:/etc/config
 ----
 
 You can then access or inject `myapp.username` and `myapp.password` properties from the `Environment` in the usual way.
 
-TIP: Volume mounted values can be bound to both string `String` and `byte[]` types depending on the contents expected.
+TIP: Configuration tree values can be bound to both string `String` and `byte[]` types depending on the contents expected.
 
 
 
@@ -771,7 +805,7 @@ For `application.properties` files a special `#---` comment is used to mark the 
 	spring.application.name=MyCloudApp
 ----
 
-NOTE: Property file separators must not have any leading or trailing whitespace and must have exactly three hypen characters.
+NOTE: Property file separators must not have any leading or trailing whitespace and must have exactly three hyphen characters.
 
 TIP: Multi-document property files are often used in conjunction with activation properties such as `spring.config.activate.on-profile`.
 See the <<boot-features-external-config-file-activation-properties, next section>> for details.
@@ -1742,21 +1776,9 @@ The configprop:spring.profiles.active[] property follows the same ordering rules
 This means that you can specify active profiles in `application.properties` and then *replace* them by using the command line switch.
 
 Sometimes, it is useful to have properties that *add* to the active profiles rather than replace them.
-The configprop:spring.profiles.include[] property can be used to unconditionally add active profiles.
-The `SpringApplication` entry point also has a Java API for setting additional profiles (that is, on top of those activated by the configprop:spring.profiles.active[] property).
+The `SpringApplication` entry point has a Java API for setting additional profiles (that is, on top of those activated by the configprop:spring.profiles.active[] property).
 See the `setAdditionalProfiles()` method in {spring-boot-module-api}/SpringApplication.html[SpringApplication].
-
-For example, when an application with the following properties is run by using the switch, `--spring.profiles.active=custom`, the `other` and `extra` profiles are still activated:
-
-[source,yaml,indent=0]
-----
-	---
-	my.property: fromyamlfile
-	spring.profiles.include:
-	  - other
-	  - extra
-----
-
+Profile groups, which are described in the <<boot-features-profiles-groups,next section>> can also be used to add active profiles if a given profile is active.
 
 
 [[boot-features-profiles-groups]]
@@ -3665,8 +3687,8 @@ You can register multiple relying parties under the `spring.security.saml2.relyi
 For security purposes, all actuators other than `/health` and `/info` are disabled by default.
 The configprop:management.endpoints.web.exposure.include[] property can be used to enable the actuators.
 
-If Spring Security is on the classpath and no other WebSecurityConfigurerAdapter is present, all actuators other than `/health` and `/info` are secured by Spring Boot auto-configuration.
-If you define a custom `WebSecurityConfigurerAdapter`, Spring Boot auto-configuration will back off and you will be in full control of actuator access rules.
+If Spring Security is on the classpath and no other `WebSecurityConfigurerAdapter` or `SecurityFilterChain` bean is present, all actuators other than `/health` and `/info` are secured by Spring Boot auto-configuration.
+If you define a custom `WebSecurityConfigurerAdapter` or `SecurityFilterChain` bean, Spring Boot auto-configuration will back off and you will be in full control of actuator access rules.
 
 NOTE: Before setting the `management.endpoints.web.exposure.include`, ensure that the exposed actuators do not contain sensitive information and/or are secured by placing them behind a firewall or by something like Spring Security.
 
@@ -4185,7 +4207,8 @@ The following examples shows how to set some PostgreSQL connection options:
 	}
 ----
 
-When a `ConnectionFactory` bean is available, the regular jdbc `DataSource` auto-configuration backs off.
+When a `ConnectionFactory` bean is available, the regular JDBC `DataSource` auto-configuration backs off.
+If you want to retain the JDBC `DataSource` auto-configuration, and are comfortable with the risk of using the blocking JDBC API in a reactive application, add `@Import(DataSourceAutoConfiguration.class)` on a `@Configuration` class in your application to re-enable it.
 
 
 
@@ -4214,7 +4237,7 @@ If you want to make sure that each context has a separate embedded database, you
 
 [[boot-features-r2dbc-using-database-client]]
 ==== Using DatabaseClient
-Spring Data's `DatabaseClient` class is auto-configured, and you can `@Autowire` it directly into your own beans, as shown in the following example:
+A `DatabaseClient` bean is auto-configured, and you can `@Autowire` it directly into your own beans, as shown in the following example:
 
 [source,java,indent=0]
 ----
@@ -4373,6 +4396,14 @@ The following example shows how to connect to a MongoDB database:
 	}
 ----
 
+If you have defined your own `MongoClient`, it will be used to auto-configure a suitable `MongoDatabaseFactory`.
+
+The auto-configured `MongoClient` is created using a `MongoClientSettings` bean.
+If you have defined your own `MongoClientSettings`, it will be used without modification and the `spring.data.mongodb` properties will be ignored.
+Otherwise a `MongoClientSettings` will be auto-configured and will have the `spring.data.mongodb` properties applied to it.
+In either case, you can declare one or more `MongoClientSettingsBuilderCustomizer` beans to fine-tune the `MongoClientSettings` configuration.
+Each will be called in order with the `MongoClientSettings.Builder` that is used to build the `MongoClientSettings`.
+
 You can set the configprop:spring.data.mongodb.uri[] property to change the URL and configure additional settings such as the _replica set_, as shown in the following example:
 
 [source,properties,indent=0,configprops]
@@ -4391,12 +4422,6 @@ For example, you might declare the following settings in your `application.prope
 	spring.data.mongodb.username=user
 	spring.data.mongodb.password=secret
 ----
-
-If you have defined your own `MongoClient`, it will be used to auto-configure a suitable `MongoDatabaseFactory`.
-
-The auto-configured `MongoClient` is created using `MongoClientSettings`.
-To fine-tune its configuration, declare one or more `MongoClientSettingsBuilderCustomizer` beans.
-Each will be called in order with the `MongoClientSettings.Builder` that is used to build the `MongoClientSettings`.
 
 TIP: If `spring.data.mongodb.port` is not specified, the default of `27017` is used.
 You could delete this line from the example shown earlier.
@@ -4532,53 +4557,13 @@ Each will be called in order with the `ConfigBuilder` that is used to build the 
 
 
 
-[[boot-features-connecting-to-neo4j-embedded]]
-==== Using the Embedded Mode
-If you add `org.neo4j:neo4j-ogm-embedded-driver` to the dependencies of your application, Spring Boot automatically configures an in-process embedded instance of Neo4j that does not persist any data when your application shuts down.
-
-NOTE: As the embedded Neo4j OGM  driver  does not provide the Neo4j kernel itself, you have to declare `org.neo4j:neo4j` as dependency yourself.
-Refer to https://neo4j.com/docs/ogm-manual/current/reference/#reference:getting-started[the Neo4j OGM documentation] for a list of compatible versions.
-
-The embedded driver takes precedence over the other drivers when there are multiple drivers on the classpath.
-You can explicitly disable the embedded mode by setting `spring.data.neo4j.embedded.enabled=false`.
-
-<<boot-features-testing-spring-boot-applications-testing-autoconfigured-neo4j-test,Data Neo4j Tests>> automatically make use of an embedded Neo4j instance if the embedded driver and Neo4j kernel are on the classpath as described above.
-
-NOTE: You can enable persistence for the embedded mode by providing a path to a database file in your configuration, e.g. `spring.data.neo4j.uri=file://var/tmp/graph.db`.
-
-
-
-[[boot-features-neo4j-ogm-native-types]]
-==== Using Native Types
-Neo4j-OGM can map some types, like those in `java.time.*`, to `String`-based properties or to one of the native types that Neo4j provides.
-For backwards compatibility reasons the default for Neo4j-OGM is to use a `String`-based representation.
-To use native types, add a dependency on either `org.neo4j:neo4j-ogm-bolt-native-types` or `org.neo4j:neo4j-ogm-embedded-native-types`, and configure the configprop:spring.data.neo4j.use-native-types[] property as shown in the following example:
-
-[source,properties,indent=0,configprops]
-----
-	spring.data.neo4j.use-native-types=true
-----
-
-
-
-[[boot-features-neo4j-ogm-session]]
-==== Neo4jSession
-By default, if you are running a web application, the session is bound to the thread for the entire processing of the request (that is, it uses the "Open Session in View" pattern).
-If you do not want this behavior, add the following line to your `application.properties` file:
-
-[source,properties,indent=0,configprops]
-----
-	spring.data.neo4j.open-in-view=false
-----
-
-
-
 [[boot-features-spring-data-neo4j-repositories]]
 ==== Spring Data Neo4j Repositories
 Spring Data includes repository support for Neo4j.
+For complete details of Spring Data Neo4j, refer to the {spring-data-neo4j-docs}[reference documentation].
 
 Spring Data Neo4j shares the common infrastructure with Spring Data JPA as many other Spring Data modules do.
-You could take the JPA example from earlier and define `City` as Neo4j OGM `@NodeEntity` rather than JPA `@Entity` and the repository abstraction works in the same way, as shown in the following example:
+You could take the JPA example from earlier and define `City` as Spring Data Neo4j `@Node` rather than JPA `@Entity` and the repository abstraction works in the same way, as shown in the following example:
 
 [source,java,indent=0]
 ----
@@ -4596,9 +4581,10 @@ You could take the JPA example from earlier and define `City` as Neo4j OGM `@Nod
 ----
 
 The `spring-boot-starter-data-neo4j` "`Starter`" enables the repository support as well as transaction management.
-You can customize the locations to look for repositories and entities by using `@EnableNeo4jRepositories` and `@EntityScan` respectively on a `@Configuration`-bean.
+Spring Boot supports both classic and reactive Neo4j repositories, using the `Neo4jTemplate` or `ReactiveNeo4jTemplate` beans.
+When Project Reactor is available on the classpath, the reactive style is also auto-configured.
 
-TIP: For complete details of Spring Data Neo4j, including its object mapping technologies, refer to the {spring-data-neo4j-docs}[reference documentation].
+You can customize the locations to look for repositories and entities by using `@EnableNeo4jRepositories` and `@EntityScan` respectively on a `@Configuration`-bean.
 
 
 
@@ -4790,8 +4776,14 @@ If the port is the same for all your contact points you can use a shortcut and o
 TIP: Those two examples are identical as the port default to `9042`.
 If you need to configure the port, use `spring.data.cassandra.port`.
 
-You can also register an arbitrary number of beans that implement `DriverConfigLoaderBuilderCustomizer` for more advanced driver customizations.
+[NOTE]
+====
+The Cassandra driver has its own configuration infrastructure that loads an `application.conf` at the root of the classpath.
+
+Spring Boot does not look for such a file and rather provides a number of configuration properties via the `spring.data.cassandra.*` namespace.
+For more advanced driver customizations, you can register an arbitrary number of beans that implement `DriverConfigLoaderBuilderCustomizer`.
 The `CqlSession` can be customized with a bean of type `CqlSessionBuilderCustomizer`.
+====
 
 NOTE: If you're using `CqlSessionBuilder` to create multiple `CqlSession` beans, keep in mind the builder is mutable so make sure to inject a fresh copy for each session.
 
@@ -4868,7 +4860,7 @@ Spring Data includes repository support for Couchbase.
 For complete details of Spring Data Couchbase, refer to the {spring-data-couchbase-docs}[reference documentation].
 
 You can inject an auto-configured `CouchbaseTemplate` instance as you would with any other Spring Bean, provided a `CouchbaseClientFactory` bean is available.
-This happens when a `Cluster` is availabe, as described above, and a bucket name as been specified:
+This happens when a `Cluster` is available, as described above, and a bucket name has been specified:
 
 [source,properties,indent=0,configprops]
 ----
@@ -5215,48 +5207,23 @@ See https://github.com/infinispan/infinispan-spring-boot[Infinispan's documentat
 
 [[boot-features-caching-provider-couchbase]]
 ==== Couchbase
-If the https://www.couchbase.com/[Couchbase] Java client and the `couchbase-spring-cache` implementation are available and Couchbase is <<boot-features-couchbase,configured>>, a `CouchbaseCacheManager` is auto-configured.
-It is also possible to create additional caches on startup by setting the configprop:spring.cache.cache-names[] property.
-These caches operate on the `Bucket` that was auto-configured.
-You can _also_ create additional caches on another `Bucket` by using the customizer.
-Assume you need two caches (`cache1` and `cache2`) on the "main" `Bucket` and one (`cache3`) cache with a custom time to live of 2 seconds on the "`another`" `Bucket`.
-You can create the first two caches through configuration, as follows:
+If Spring Data Couchbase is available and Couchbase is <<boot-features-couchbase,configured>>, a `CouchbaseCacheManager` is auto-configured.
+It is possible to create additional caches on startup by setting the configprop:spring.cache.cache-names[] property and cache defaults can be configured by using `spring.cache.couchbase.*` properties.
+For instance, the following configuration creates `cache1` and `cache2` caches with an entry _expiration_ of 10 minutes:
 
 [source,properties,indent=0,configprops]
 ----
 	spring.cache.cache-names=cache1,cache2
+    spring.cache.couchbase.expiration=10m
 ----
 
-Then you can define a `@Configuration` class to configure the extra `Bucket` and the `cache3` cache, as follows:
+If you need more control over the configuration, consider registering a `CouchbaseCacheManagerBuilderCustomizer` bean.
+The following example shows a customizer that configures a specific entry expiration for `cache1` and `cache2`:
 
 [source,java,indent=0]
 ----
-	@Configuration(proxyBeanMethods = false)
-	public class CouchbaseCacheConfiguration {
-
-		private final Cluster cluster;
-
-		public CouchbaseCacheConfiguration(Cluster cluster) {
-			this.cluster = cluster;
-		}
-
-		@Bean
-		public Bucket anotherBucket() {
-			return this.cluster.openBucket("another", "secret");
-		}
-
-		@Bean
-		public CacheManagerCustomizer<CouchbaseCacheManager> cacheManagerCustomizer() {
-			return c -> {
-				c.prepareCache("cache3", CacheBuilder.newInstance(anotherBucket())
-						.withExpiration(2));
-			};
-		}
-
-	}
+include::{code-examples}/cache/CouchbaseCacheManagerCustomizationExample.java[tag=configuration]
 ----
-
-This sample configuration reuses the `Cluster` that was created through auto-configuration.
 
 
 
@@ -5791,7 +5758,7 @@ The following component creates a listener endpoint on the `someTopic` topic:
 ----
 
 If a `KafkaTransactionManager` bean is defined, it is automatically associated to the container factory.
-Similarly, if a `ErrorHandler`, `AfterRollbackProcessor` or `ConsumerAwareRebalanceListener` bean is defined, it is automatically associated to the default factory.
+Similarly, if a `RecordFilterStrategy`, `ErrorHandler`, `AfterRollbackProcessor` or `ConsumerAwareRebalanceListener` bean is defined, it is automatically associated to the default factory.
 
 Depending on the listener type, a `RecordMessageConverter` or `BatchMessageConverter` bean is associated to the default factory.
 If only a `RecordMessageConverter` bean is present for a batch listener, it is wrapped in a `BatchMessageConverter`.
@@ -6732,6 +6699,9 @@ NOTE: While Spring's test framework caches application contexts between tests an
 TIP: If you are using `@SpyBean` to spy on a bean with `@Cacheable` methods that refer to parameters by name, your application must be compiled with `-parameters`.
 This ensures that the parameter names are available to the caching infrastructure once the bean has been spied upon.
 
+TIP: When you are using `@SpyBean` to spy on a bean that is proxied by Spring, you may need to remove Spring's proxy in some situations, for example when setting expectations using `given` or `when`.
+Use `AopTestUtils.getTargetObject(yourProxiedSpy)` to do so.
+
 
 
 [[boot-features-testing-spring-boot-applications-testing-autoconfigured-tests]]
@@ -6987,6 +6957,34 @@ TIP: Sometimes writing Spring WebFlux tests is not enough; Spring Boot can help 
 
 
 
+[[boot-features-testing-spring-boot-applications-testing-autoconfigured-cassandra-test]]
+==== Auto-configured Data Cassandra Tests
+You can use `@DataCassandraTest` to test Cassandra applications.
+By default, it configures a `CassandraTemplate`, scans for `@Table` classes, and configures Spring Data Cassandra repositories.
+Regular `@Component` beans are not loaded into the `ApplicationContext`.
+(For more about using Cassandra with Spring Boot, see "<<boot-features-cassandra>>", earlier in this chapter.)
+
+TIP: A list of the auto-configuration settings that are enabled by `@DataCassandraTest` can be <<appendix-test-auto-configuration.adoc#test-auto-configuration,found in the appendix>>.
+
+The following example shows a typical setup for using Cassandra tests in Spring Boot:
+
+[source,java,indent=0]
+----
+	import org.springframework.beans.factory.annotation.Autowired;
+	import org.springframework.boot.test.autoconfigure.data.cassandra.DataCassandraTest;
+
+	@DataCassandraTest
+	class ExampleDataCassandraTests {
+
+		@Autowired
+		private YourRepository repository;
+
+		//
+	}
+----
+
+
+
 [[boot-features-testing-spring-boot-applications-testing-autoconfigured-jpa-test]]
 ==== Auto-configured Data JPA Tests
 You can use the `@DataJpaTest` annotation to test JPA applications.
@@ -7189,7 +7187,7 @@ If, however, you prefer to run tests against a real MongoDB server, you should e
 [[boot-features-testing-spring-boot-applications-testing-autoconfigured-neo4j-test]]
 ==== Auto-configured Data Neo4j Tests
 You can use `@DataNeo4jTest` to test Neo4j applications.
-By default, it uses an in-memory embedded Neo4j (if the embedded driver is available), scans for `@NodeEntity` classes, and configures Spring Data Neo4j repositories.
+By default, it scans for `@Node` classes, and configures Spring Data Neo4j repositories.
 Regular `@Component` beans are not loaded into the `ApplicationContext`.
 (For more about using Neo4J with Spring Boot, see "<<boot-features-neo4j>>", earlier in this chapter.)
 
@@ -7349,7 +7347,7 @@ It can also be used to configure the host, scheme, and port that appears in any 
 
 [[boot-features-testing-spring-boot-applications-testing-autoconfigured-rest-docs-mock-mvc]]
 ===== Auto-configured Spring REST Docs Tests with Mock MVC
-`@AutoConfigureRestDocs` customizes the `MockMvc` bean to use Spring REST Docs.
+`@AutoConfigureRestDocs` customizes the `MockMvc` bean to use Spring REST Docs when testing Servlet-based web applications.
 You can inject it by using `@Autowired` and use it in your tests as you normally would when using Mock MVC and Spring REST Docs, as shown in the following example:
 
 [source,java,indent=0]
@@ -7419,7 +7417,7 @@ The following example shows a `RestDocumentationResultHandler` being defined:
 
 [[boot-features-testing-spring-boot-applications-testing-autoconfigured-rest-docs-web-test-client]]
 ===== Auto-configured Spring REST Docs Tests with WebTestClient
-`@AutoConfigureRestDocs` can also be used with `WebTestClient`.
+`@AutoConfigureRestDocs` can also be used with `WebTestClient` when testing reactive web applications.
 You can inject it by using `@Autowired` and use it in your tests as you normally would when using `@WebFluxTest` and Spring REST Docs, as shown in the following example:
 
 [source,java,indent=0]
@@ -7943,7 +7941,7 @@ TIP: If multiple auto-configurations have to be defined, there is no need to ord
 
 Each test can use the runner to represent a particular use case.
 For instance, the sample below invokes a user configuration (`UserConfiguration`) and checks that the auto-configuration backs off properly.
-Invoking `run` provides a callback context that can be used with `Assert4J`.
+Invoking `run` provides a callback context that can be used with `AssertJ`.
 
 [source,java,indent=0]
 ----
@@ -8288,7 +8286,7 @@ Note that some features (such as detecting the default value or deprecated items
 === Testing
 While it is possible to use JUnit 4 to test Kotlin code, JUnit 5 is provided by default and is recommended.
 JUnit 5 enables a test class to be instantiated once and reused for all of the class's tests.
-This makes it possible to use `@BeforeClass` and `@AfterClass` annotations on non-static methods, which is a good fit for Kotlin.
+This makes it possible to use `@BeforeAll` and `@AfterAll` annotations on non-static methods, which is a good fit for Kotlin.
 
 To mock Kotlin classes, https://mockk.io/[MockK] is recommended.
 If you need the `Mockk` equivalent of the Mockito specific <<boot-features-testing-spring-boot-applications-mocking-beans,`@MockBean` and `@SpyBean` annotations>>, you can use https://github.com/Ninja-Squad/springmockk[SpringMockK] which provides similar `@MockkBean` and `@SpykBean` annotations.
@@ -8384,6 +8382,10 @@ For Gradle, refer to the {spring-boot-gradle-plugin-docs}#packaging-layered-jars
 ==== Writing the Dockerfile
 When you create a jar containing the layers index file, the `spring-boot-jarmode-layertools` jar will be added as a dependency to your jar.
 With this jar on the classpath, you can launch your application in a special mode which allows the bootstrap code to run something entirely different from your application, for example, something that extracts the layers.
+
+CAUTION: The `layertools` mode can not be used with a <<deployment.adoc#deployment-install, fully executable Spring Boot archive>> that includes a launch script.
+Disable launch script configuration when building a jar file that is intended to be used with `layertools`.
+
 Here’s how you can launch your jar with a `layertools` jar mode:
 
 [source]

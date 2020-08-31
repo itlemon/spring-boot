@@ -24,11 +24,12 @@ import java.net.URI;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.springframework.boot.buildpack.platform.docker.DockerApi.ContainerApi;
 import org.springframework.boot.buildpack.platform.docker.DockerApi.ImageApi;
@@ -50,6 +51,7 @@ import org.springframework.boot.buildpack.platform.io.TarArchive;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -64,6 +66,7 @@ import static org.mockito.Mockito.verify;
  * @author Phillip Webb
  * @author Scott Frederick
  */
+@ExtendWith(MockitoExtension.class)
 class DockerApiTests {
 
 	private static final String API_URL = "/" + DockerApi.API_VERSION;
@@ -81,7 +84,6 @@ class DockerApiTests {
 
 	@BeforeEach
 	void setup() {
-		MockitoAnnotations.initMocks(this);
 		this.dockerApi = new DockerApi(this.http);
 	}
 
@@ -127,7 +129,6 @@ class DockerApiTests {
 
 		@BeforeEach
 		void setup() {
-			MockitoAnnotations.initMocks(this);
 			this.api = DockerApiTests.this.dockerApi.image();
 		}
 
@@ -170,6 +171,16 @@ class DockerApiTests {
 			ImageArchive archive = mock(ImageArchive.class);
 			assertThatIllegalArgumentException().isThrownBy(() -> this.api.load(archive, null))
 					.withMessage("Listener must not be null");
+		}
+
+		@Test // gh-23130
+		void loadWithEmptyResponseThrowsException() throws Exception {
+			Image image = Image.of(getClass().getResourceAsStream("type/image.json"));
+			ImageArchive archive = ImageArchive.from(image);
+			URI loadUri = new URI(IMAGES_URL + "/load");
+			given(http().post(eq(loadUri), eq("application/x-tar"), any())).willReturn(emptyResponse());
+			assertThatIllegalStateException().isThrownBy(() -> this.api.load(archive, this.loadListener))
+					.withMessageContaining("Invalid response received");
 		}
 
 		@Test
@@ -217,6 +228,21 @@ class DockerApiTests {
 			verify(http()).delete(removeUri);
 		}
 
+		@Test
+		void inspectWhenReferenceIsNullThrowsException() {
+			assertThatIllegalArgumentException().isThrownBy(() -> this.api.inspect(null))
+					.withMessage("Reference must not be null");
+		}
+
+		@Test
+		void inspectInspectImage() throws Exception {
+			ImageReference reference = ImageReference.of("gcr.io/paketo-buildpacks/builder:base");
+			URI imageUri = new URI(IMAGES_URL + "/gcr.io/paketo-buildpacks/builder:base/json");
+			given(http().get(imageUri)).willReturn(responseOf("type/image.json"));
+			Image image = this.api.inspect(reference);
+			assertThat(image.getLayers()).hasSize(46);
+		}
+
 	}
 
 	@Nested
@@ -232,7 +258,6 @@ class DockerApiTests {
 
 		@BeforeEach
 		void setup() {
-			MockitoAnnotations.initMocks(this);
 			this.api = DockerApiTests.this.dockerApi.container();
 		}
 
@@ -370,7 +395,6 @@ class DockerApiTests {
 
 		@BeforeEach
 		void setup() {
-			MockitoAnnotations.initMocks(this);
 			this.api = DockerApiTests.this.dockerApi.volume();
 		}
 

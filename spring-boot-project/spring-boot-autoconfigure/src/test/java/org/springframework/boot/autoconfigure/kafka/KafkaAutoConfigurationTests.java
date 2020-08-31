@@ -62,6 +62,7 @@ import org.springframework.kafka.listener.ContainerProperties.AckMode;
 import org.springframework.kafka.listener.RecordInterceptor;
 import org.springframework.kafka.listener.SeekToCurrentBatchErrorHandler;
 import org.springframework.kafka.listener.SeekToCurrentErrorHandler;
+import org.springframework.kafka.listener.adapter.RecordFilterStrategy;
 import org.springframework.kafka.security.jaas.KafkaJaasLoginModuleInitializer;
 import org.springframework.kafka.support.converter.BatchMessageConverter;
 import org.springframework.kafka.support.converter.BatchMessagingMessageConverter;
@@ -367,8 +368,8 @@ class KafkaAutoConfigurationTests {
 						"spring.kafka.listener.ack-count=123", "spring.kafka.listener.ack-time=456",
 						"spring.kafka.listener.concurrency=3", "spring.kafka.listener.poll-timeout=2000",
 						"spring.kafka.listener.no-poll-threshold=2.5", "spring.kafka.listener.type=batch",
-						"spring.kafka.listener.idle-event-interval=1s", "spring.kafka.listener.monitor-interval=45",
-						"spring.kafka.listener.log-container-config=true",
+						"spring.kafka.listener.idle-between-polls=1s", "spring.kafka.listener.idle-event-interval=1s",
+						"spring.kafka.listener.monitor-interval=45", "spring.kafka.listener.log-container-config=true",
 						"spring.kafka.listener.missing-topics-fatal=true", "spring.kafka.jaas.enabled=true",
 						"spring.kafka.producer.transaction-id-prefix=foo", "spring.kafka.jaas.login-module=foo",
 						"spring.kafka.jaas.control-flag=REQUISITE", "spring.kafka.jaas.options.useKeyTab=true")
@@ -391,6 +392,7 @@ class KafkaAutoConfigurationTests {
 					assertThat(containerProperties.getAckTime()).isEqualTo(456L);
 					assertThat(containerProperties.getPollTimeout()).isEqualTo(2000L);
 					assertThat(containerProperties.getNoPollThreshold()).isEqualTo(2.5f);
+					assertThat(containerProperties.getIdleBetweenPolls()).isEqualTo(1000L);
 					assertThat(containerProperties.getIdleEventInterval()).isEqualTo(1000L);
 					assertThat(containerProperties.getMonitorInterval()).isEqualTo(45);
 					assertThat(containerProperties.isLogContainerConfig()).isTrue();
@@ -461,6 +463,25 @@ class KafkaAutoConfigurationTests {
 			Object messageConverter = ReflectionTestUtils.getField(kafkaListenerContainerFactory, "messageConverter");
 			assertThat(messageConverter).isInstanceOf(BatchMessagingMessageConverter.class);
 			assertThat(((BatchMessageConverter) messageConverter).getRecordMessageConverter()).isNull();
+		});
+	}
+
+	@Test
+	void testConcurrentKafkaListenerContainerFactoryWithDefaultRecordFilterStrategy() {
+		this.contextRunner.run((context) -> {
+			ConcurrentKafkaListenerContainerFactory<?, ?> factory = context
+					.getBean(ConcurrentKafkaListenerContainerFactory.class);
+			assertThat(factory).hasFieldOrPropertyWithValue("recordFilterStrategy", null);
+		});
+	}
+
+	@Test
+	void testConcurrentKafkaListenerContainerFactoryWithCustomRecordFilterStrategy() {
+		this.contextRunner.withUserConfiguration(RecordFilterStrategyConfiguration.class).run((context) -> {
+			ConcurrentKafkaListenerContainerFactory<?, ?> factory = context
+					.getBean(ConcurrentKafkaListenerContainerFactory.class);
+			assertThat(factory).hasFieldOrPropertyWithValue("recordFilterStrategy",
+					context.getBean("recordFilterStrategy"));
 		});
 	}
 
@@ -604,6 +625,16 @@ class KafkaAutoConfigurationTests {
 		@Bean
 		BatchMessageConverter myBatchMessageConverter() {
 			return mock(BatchMessageConverter.class);
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class RecordFilterStrategyConfiguration {
+
+		@Bean
+		RecordFilterStrategy<Object, Object> recordFilterStrategy() {
+			return (record) -> false;
 		}
 
 	}

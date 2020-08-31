@@ -23,8 +23,9 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.mock.env.MockPropertySource;
@@ -38,6 +39,7 @@ import static org.mockito.BDDMockito.given;
  * @author Phillip Webb
  * @author Madhura Bhave
  */
+@ExtendWith(MockitoExtension.class)
 class ConfigDataImporterTests {
 
 	@Mock
@@ -53,6 +55,9 @@ class ConfigDataImporterTests {
 	private ConfigDataLocationResolverContext locationResolverContext;
 
 	@Mock
+	private ConfigDataLoaderContext loaderContext;
+
+	@Mock
 	private ConfigDataActivationContext activationContext;
 
 	@Mock
@@ -60,7 +65,6 @@ class ConfigDataImporterTests {
 
 	@BeforeEach
 	void setup() {
-		MockitoAnnotations.initMocks(this);
 		given(this.activationContext.getProfiles()).willReturn(this.profiles);
 	}
 
@@ -74,11 +78,12 @@ class ConfigDataImporterTests {
 		ConfigData configData2 = new ConfigData(Collections.singleton(new MockPropertySource()));
 		given(this.resolvers.resolveAll(this.locationResolverContext, locations, this.profiles))
 				.willReturn(resolvedLocations);
-		given(this.loaders.load(resolvedLocation1)).willReturn(configData1);
-		given(this.loaders.load(resolvedLocation2)).willReturn(configData2);
+		given(this.loaders.load(this.loaderContext, resolvedLocation1)).willReturn(configData1);
+		given(this.loaders.load(this.loaderContext, resolvedLocation2)).willReturn(configData2);
 		ConfigDataImporter importer = new ConfigDataImporter(this.resolvers, this.loaders);
 		Collection<ConfigData> loaded = importer
-				.resolveAndLoad(this.activationContext, this.locationResolverContext, locations).values();
+				.resolveAndLoad(this.activationContext, this.locationResolverContext, this.loaderContext, locations)
+				.values();
 		assertThat(loaded).containsExactly(configData2, configData1);
 	}
 
@@ -98,14 +103,14 @@ class ConfigDataImporterTests {
 				.willReturn(resolvedLocations1and2);
 		given(this.resolvers.resolveAll(this.locationResolverContext, locations2and3, this.profiles))
 				.willReturn(resolvedLocations2and3);
-		given(this.loaders.load(resolvedLocation1)).willReturn(configData1);
-		given(this.loaders.load(resolvedLocation2)).willReturn(configData2);
-		given(this.loaders.load(resolvedLocation3)).willReturn(configData3);
+		given(this.loaders.load(this.loaderContext, resolvedLocation1)).willReturn(configData1);
+		given(this.loaders.load(this.loaderContext, resolvedLocation2)).willReturn(configData2);
+		given(this.loaders.load(this.loaderContext, resolvedLocation3)).willReturn(configData3);
 		ConfigDataImporter importer = new ConfigDataImporter(this.resolvers, this.loaders);
-		Collection<ConfigData> loaded1and2 = importer
-				.resolveAndLoad(this.activationContext, this.locationResolverContext, locations1and2).values();
-		Collection<ConfigData> loaded2and3 = importer
-				.resolveAndLoad(this.activationContext, this.locationResolverContext, locations2and3).values();
+		Collection<ConfigData> loaded1and2 = importer.resolveAndLoad(this.activationContext,
+				this.locationResolverContext, this.loaderContext, locations1and2).values();
+		Collection<ConfigData> loaded2and3 = importer.resolveAndLoad(this.activationContext,
+				this.locationResolverContext, this.loaderContext, locations2and3).values();
 		assertThat(loaded1and2).containsExactly(configData2, configData1);
 		assertThat(loaded2and3).containsExactly(configData3);
 	}

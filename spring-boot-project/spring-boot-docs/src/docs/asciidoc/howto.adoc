@@ -487,8 +487,8 @@ To scan for a free port (using OS natives to prevent clashes) use `server.port=0
 
 [[howto-discover-the-http-port-at-runtime]]
 === Discover the HTTP Port at Runtime
-You can access the port the server is running on from log output or from the `ServletWebServerApplicationContext` through its `WebServer`.
-The best way to get that and be sure that it has been initialized is to add a `@Bean` of type `ApplicationListener<ServletWebServerInitializedEvent>` and pull the container out of the event when it is published.
+You can access the port the server is running on from log output or from the `WebServerApplicationContext` through its `WebServer`.
+The best way to get that and be sure it has been initialized is to add a `@Bean` of type `ApplicationListener<WebServerInitializedEvent>` and pull the container out of the event when it is published.
 
 Tests that use `@SpringBootTest(webEnvironment=WebEnvironment.RANDOM_PORT)` can also inject the actual port into a field by using the `@LocalServerPort` annotation, as shown in the following example:
 
@@ -496,9 +496,6 @@ Tests that use `@SpringBootTest(webEnvironment=WebEnvironment.RANDOM_PORT)` can 
 ----
 	@SpringBootTest(webEnvironment=WebEnvironment.RANDOM_PORT)
 	public class MyWebIntegrationTests {
-
-		@Autowired
-		ServletWebServerApplicationContext server;
 
 		@LocalServerPort
 		int port;
@@ -571,7 +568,7 @@ We recommend using `application.properties` to configure HTTPS, as the HTTP conn
 [[howto-configure-http2]]
 === Configure HTTP/2
 You can enable HTTP/2 support in your Spring Boot application with the configprop:server.http2.enabled[] configuration property.
-This support depends on the chosen web server and the application environment, since that protocol is not supported out-of-the-box by JDK8.
+This support depends on the chosen web server and the application environment, since that protocol is not supported out-of-the-box by all JDK8 releases.
 
 [NOTE]
 ====
@@ -589,8 +586,12 @@ As of Undertow 1.4.0+, HTTP/2 is supported without any additional requirement on
 
 [[howto-configure-http2-jetty]]
 ==== HTTP/2 with Jetty
-As of Jetty 9.4.8, HTTP/2 is also supported with the https://www.conscrypt.org/[Conscrypt library].
-To enable that support, your application needs to have two additional dependencies: `org.eclipse.jetty:jetty-alpn-conscrypt-server` and `org.eclipse.jetty.http2:http2-server`.
+For HTTP/2 support, Jetty requires the additional `org.eclipse.jetty.http2:http2-server` dependency.
+Now depending on your deployment, you also need to choose other dependencies:
+
+* `org.eclipse.jetty:jetty-alpn-java-server` for applications running on JDK9+
+* `org.eclipse.jetty:jetty-alpn-openjdk8-server` for applications running on JDK8u252+
+* `org.eclipse.jetty:jetty-alpn-conscrypt-server` and the https://www.conscrypt.org/[Conscrypt library] with no JDK requirement
 
 
 
@@ -1957,9 +1958,8 @@ Make sure to disable `spring.jpa.hibernate.ddl-auto` if you use `schema.sql`.
 	spring.jpa.hibernate.ddl-auto=none
 ----
 
-If you are using a <<spring-boot-features.adoc#howto-use-a-higher-level-database-migration-tool,Higher-level Database Migration Tool>>, like Flyway or Liquibase, you cannot use basic SQL scripts to create and initialize the schema.
-In this situation, if `schema.sql` and `data.sql` are present, they will be ignored.
-It is not possible to use a Database Migration Tool to manage schema creation, and a basic SQL script to initialize it.
+If you are using a <<spring-boot-features.adoc#howto-use-a-higher-level-database-migration-tool,Higher-level Database Migration Tool>>, like Flyway or Liquibase, you should use them alone to create and initialize the schema.
+Using the basic `schema.sql` and `data.sql` scripts alongside Flyway or Liquibase is not recommended and support will be removed in a future release.
 ====
 
 By default, Spring Boot enables the fail-fast feature of the Spring JDBC initializer.
@@ -1972,7 +1972,7 @@ You can tune that behavior by setting `spring.datasource.continue-on-error`.
 === Initialize a Database Using R2DBC
 If you are using R2DBC, the regular `DataSource` auto-configuration backs off so none of the options described above can be used.
 
-If you are using Spring Data R2DBC, you can initialize the database on startup using SQL scripts as shown in the following example:
+You can initialize the database on startup using SQL scripts as shown in the following example:
 
 [source,java,indent=0]
 ----
@@ -2265,7 +2265,7 @@ For more about Spring Security, see the {spring-security}[Spring Security projec
 
 [[howto-switch-off-spring-boot-security-configuration]]
 === Switch off the Spring Boot Security Configuration
-If you define a `@Configuration` with a `WebSecurityConfigurerAdapter` in your application, it switches off the default webapp security settings in Spring Boot.
+If you define a `@Configuration` with a `WebSecurityConfigurerAdapter` or a `SecurityFilterChain` bean in your application, it switches off the default webapp security settings in Spring Boot.
 
 
 [[howto-change-the-user-details-service-and-add-user-accounts]]
@@ -2475,7 +2475,7 @@ Overriding versions may cause compatibility issues.
 
 To override dependency versions with Maven, see {spring-boot-maven-plugin-docs}#using[this section] of the Maven plugin's documentation.
 
-To override dependency versions in Gradle, see {spring-boot-gradle-plugin-docs}#managing-dependencies-customizing[this section] of the Gradle plugin's documentation.
+To override dependency versions in Gradle, see {spring-boot-gradle-plugin-docs}#managing-dependencies-dependency-management-plugin-customizing[this section] of the Gradle plugin's documentation.
 
 
 
@@ -2978,7 +2978,7 @@ class ExampleIntegrationTests {
 
     @DynamicPropertySource
     static void neo4jProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.data.neo4j.uri", neo4j::getBoltUrl);
+        registry.add("spring.neo4j.uri", neo4j::getBoltUrl);
     }
 
 }

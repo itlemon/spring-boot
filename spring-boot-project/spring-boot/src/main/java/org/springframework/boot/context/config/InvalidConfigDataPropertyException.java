@@ -35,8 +35,6 @@ import org.springframework.boot.context.properties.source.ConfigurationPropertyS
  */
 public class InvalidConfigDataPropertyException extends ConfigDataException {
 
-	private static final Map<ConfigurationPropertyName, ConfigurationPropertyName> ERROR = Collections.emptyMap();
-
 	private static final Map<ConfigurationPropertyName, ConfigurationPropertyName> WARNING;
 	static {
 		Map<ConfigurationPropertyName, ConfigurationPropertyName> warning = new LinkedHashMap<>();
@@ -86,20 +84,16 @@ public class InvalidConfigDataPropertyException extends ConfigDataException {
 	}
 
 	/**
-	 * Throw a {@link InvalidConfigDataPropertyException} if the given
-	 * {@link ConfigDataEnvironmentContributor} contains any invalid property.
+	 * Throw a {@link InvalidConfigDataPropertyException} or log a warning if the given
+	 * {@link ConfigDataEnvironmentContributor} contains any invalid property. A warning
+	 * is logged if the property is still supported, but not recommended. An error is
+	 * thrown if the property is completely unsupported.
 	 * @param logger the logger to use for warnings
 	 * @param contributor the contributor to check
 	 */
 	static void throwOrWarn(Log logger, ConfigDataEnvironmentContributor contributor) {
 		ConfigurationPropertySource propertySource = contributor.getConfigurationPropertySource();
 		if (propertySource != null) {
-			ERROR.forEach((invalid, replacement) -> {
-				ConfigurationProperty property = propertySource.getConfigurationProperty(invalid);
-				if (property != null) {
-					throw new InvalidConfigDataPropertyException(property, replacement, contributor.getLocation());
-				}
-			});
 			WARNING.forEach((invalid, replacement) -> {
 				ConfigurationProperty property = propertySource.getConfigurationProperty(invalid);
 				if (property != null) {

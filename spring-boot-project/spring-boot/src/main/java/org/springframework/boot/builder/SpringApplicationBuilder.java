@@ -40,6 +40,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.core.metrics.ApplicationStartup;
 import org.springframework.util.StringUtils;
 
 /**
@@ -397,16 +398,6 @@ public class SpringApplicationBuilder {
 	}
 
 	/**
-	 * Default properties for the environment in the form {@code key=value} or
-	 * {@code key:value}.
-	 * @param defaultProperties the properties to set.
-	 * @return the current builder
-	 */
-	public SpringApplicationBuilder properties(String... defaultProperties) {
-		return properties(getMapFromKeyValuePairs(defaultProperties));
-	}
-
-	/**
 	 * Flag to control whether the application should be initialized lazily.
 	 * @param lazyInitialization the flag to set. Defaults to false.
 	 * @return the current builder
@@ -415,6 +406,19 @@ public class SpringApplicationBuilder {
 	public SpringApplicationBuilder lazyInitialization(boolean lazyInitialization) {
 		this.application.setLazyInitialization(lazyInitialization);
 		return this;
+	}
+
+	/**
+	 * Default properties for the environment in the form {@code key=value} or
+	 * {@code key:value}. Multiple calls to this method are cumulative and will not clear
+	 * any previously set properties.
+	 * @param defaultProperties the properties to set.
+	 * @return the current builder
+	 * @see SpringApplicationBuilder#properties(Properties)
+	 * @see SpringApplicationBuilder#properties(Map)
+	 */
+	public SpringApplicationBuilder properties(String... defaultProperties) {
+		return properties(getMapFromKeyValuePairs(defaultProperties));
 	}
 
 	private Map<String, Object> getMapFromKeyValuePairs(String[] properties) {
@@ -440,10 +444,12 @@ public class SpringApplicationBuilder {
 	}
 
 	/**
-	 * Default properties for the environment in the form {@code key=value} or
-	 * {@code key:value}.
+	 * Default properties for the environment.Multiple calls to this method are cumulative
+	 * and will not clear any previously set properties.
 	 * @param defaultProperties the properties to set.
 	 * @return the current builder
+	 * @see SpringApplicationBuilder#properties(String...)
+	 * @see SpringApplicationBuilder#properties(Map)
 	 */
 	public SpringApplicationBuilder properties(Properties defaultProperties) {
 		return properties(getMapFromProperties(defaultProperties));
@@ -459,10 +465,11 @@ public class SpringApplicationBuilder {
 
 	/**
 	 * Default properties for the environment. Multiple calls to this method are
-	 * cumulative.
+	 * cumulative and will not clear any previously set properties.
 	 * @param defaults the default properties
 	 * @return the current builder
 	 * @see SpringApplicationBuilder#properties(String...)
+	 * @see SpringApplicationBuilder#properties(Properties)
 	 */
 	public SpringApplicationBuilder properties(Map<String, Object> defaults) {
 		this.defaultProperties.putAll(defaults);
@@ -545,6 +552,18 @@ public class SpringApplicationBuilder {
 	 */
 	public SpringApplicationBuilder listeners(ApplicationListener<?>... listeners) {
 		this.application.addListeners(listeners);
+		return this;
+	}
+
+	/**
+	 * Configure the {@link ApplicationStartup} to be used with the
+	 * {@link ApplicationContext} for collecting startup metrics.
+	 * @param applicationStartup the application startup to use
+	 * @return the current builder
+	 * @since 2.4.0
+	 */
+	public SpringApplicationBuilder applicationStartup(ApplicationStartup applicationStartup) {
+		this.application.setApplicationStartup(applicationStartup);
 		return this;
 	}
 

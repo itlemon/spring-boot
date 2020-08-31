@@ -31,13 +31,13 @@ import static org.mockito.Mockito.mock;
  */
 class ConfigDataLocationResolverTests {
 
-	ConfigDataLocationResolver<?> resolver = new TestConfigDataLocationResolver();
+	private ConfigDataLocationResolver<?> resolver = new TestConfigDataLocationResolver();
 
-	ConfigDataLocationResolverContext context = mock(ConfigDataLocationResolverContext.class);
+	private ConfigDataLocationResolverContext context = mock(ConfigDataLocationResolverContext.class);
 
 	@Test
 	void resolveProfileSpecificReturnsEmptyList() {
-		assertThat(this.resolver.resolveProfileSpecific(this.context, null, null)).isEmpty();
+		assertThat(this.resolver.resolveProfileSpecific(this.context, null, true, null)).isEmpty();
 	}
 
 	static class TestConfigDataLocationResolver implements ConfigDataLocationResolver<ConfigDataLocation> {
@@ -48,7 +48,8 @@ class ConfigDataLocationResolverTests {
 		}
 
 		@Override
-		public List<ConfigDataLocation> resolve(ConfigDataLocationResolverContext context, String location) {
+		public List<ConfigDataLocation> resolve(ConfigDataLocationResolverContext context, String location,
+				boolean optional) {
 			return null;
 		}
 

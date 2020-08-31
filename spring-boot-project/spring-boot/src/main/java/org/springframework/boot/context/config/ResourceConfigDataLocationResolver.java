@@ -25,12 +25,14 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.logging.Log;
 
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.PropertySourceLoader;
+import org.springframework.boot.origin.Origin;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.Environment;
 import org.springframework.core.io.FileSystemResource;
@@ -62,6 +64,8 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 	private static final Comparator<File> FILE_COMPARATOR = Comparator.comparing(File::getAbsolutePath);
 
 	private static final Pattern URL_PREFIX = Pattern.compile("^([a-zA-Z][a-zA-Z0-9*]*?:)(.*$)");
+
+	private static final Pattern EXTENSION_HINT_PATTERN = Pattern.compile("^(.*)\\[(\\.\\w+)\\](?!\\[)$");
 
 	private static final String NO_PROFILE = null;
 
@@ -110,23 +114,26 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 	}
 
 	@Override
-	public List<ResourceConfigDataLocation> resolve(ConfigDataLocationResolverContext context, String location) {
-		return resolve(location, getResolvables(context, location));
+	public List<ResourceConfigDataLocation> resolve(ConfigDataLocationResolverContext context, String location,
+			boolean optional) {
+		return resolve(location, getResolvables(context, location, optional));
 	}
 
 	@Override
 	public List<ResourceConfigDataLocation> resolveProfileSpecific(ConfigDataLocationResolverContext context,
-			String location, Profiles profiles) {
-		return resolve(location, getProfileSpecificResolvables(context, location, profiles));
+			String location, boolean optional, Profiles profiles) {
+		return resolve(location, getProfileSpecificResolvables(context, location, optional, profiles));
 	}
 
-	private Set<Resolvable> getResolvables(ConfigDataLocationResolverContext context, String location) {
+	private Set<Resolvable> getResolvables(ConfigDataLocationResolverContext context, String location,
+			boolean optional) {
+		Origin origin = context.getLocationOrigin(location);
 		String resourceLocation = getResourceLocation(context, location);
 		try {
 			if (isDirectoryLocation(resourceLocation)) {
-				return getResolvablesForDirectory(resourceLocation, NO_PROFILE);
+				return getResolvablesForDirectory(resourceLocation, optional, NO_PROFILE, origin);
 			}
-			return getResolvablesForFile(resourceLocation, NO_PROFILE);
+			return getResolvablesForFile(resourceLocation, optional, NO_PROFILE, origin);
 		}
 		catch (RuntimeException ex) {
 			throw new IllegalStateException("Unable to load config data from '" + location + "'", ex);
@@ -134,11 +141,12 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 	}
 
 	private Set<Resolvable> getProfileSpecificResolvables(ConfigDataLocationResolverContext context, String location,
-			Profiles profiles) {
+			boolean optional, Profiles profiles) {
+		Origin origin = context.getLocationOrigin(location);
 		Set<Resolvable> resolvables = new LinkedHashSet<>();
 		String resourceLocation = getResourceLocation(context, location);
 		for (String profile : profiles) {
-			resolvables.addAll(getResolvables(resourceLocation, profile));
+			resolvables.addAll(getResolvables(resourceLocation, optional, profile, origin));
 		}
 		return resolvables;
 	}
@@ -158,31 +166,42 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 		return resourceLocation;
 	}
 
-	private Set<Resolvable> getResolvables(String resourceLocation, String profile) {
+	private Set<Resolvable> getResolvables(String resourceLocation, boolean optional, String profile, Origin origin) {
 		if (isDirectoryLocation(resourceLocation)) {
-			return getResolvablesForDirectory(resourceLocation, profile);
+			return getResolvablesForDirectory(resourceLocation, optional, profile, origin);
 		}
-		return getResolvablesForFile(resourceLocation, profile);
+		return getResolvablesForFile(resourceLocation, optional, profile, origin);
 	}
 
-	private Set<Resolvable> getResolvablesForDirectory(String resourceLocation, String profile) {
+	private Set<Resolvable> getResolvablesForDirectory(String directoryLocation, boolean optional, String profile,
+			Origin origin) {
 		Set<Resolvable> resolvables = new LinkedHashSet<>();
 		for (String name : this.configNames) {
+			String rootLocation = directoryLocation + name;
 			for (PropertySourceLoader loader : this.propertySourceLoaders) {
 				for (String extension : loader.getFileExtensions()) {
-					resolvables.add(new Resolvable(resourceLocation + name, profile, extension, loader));
+					Resolvable resolvable = new Resolvable(directoryLocation, rootLocation, optional, profile,
+							extension, origin, loader);
+					resolvables.add(resolvable);
 				}
 			}
 		}
 		return resolvables;
 	}
 
-	private Set<Resolvable> getResolvablesForFile(String resourceLocation, String profile) {
+	private Set<Resolvable> getResolvablesForFile(String fileLocation, boolean optional, String profile,
+			Origin origin) {
+		Matcher extensionHintMatcher = EXTENSION_HINT_PATTERN.matcher(fileLocation);
+		boolean extensionHintLocation = extensionHintMatcher.matches();
+		if (extensionHintLocation) {
+			fileLocation = extensionHintMatcher.group(1) + extensionHintMatcher.group(2);
+		}
 		for (PropertySourceLoader loader : this.propertySourceLoaders) {
-			String extension = getLoadableFileExtension(loader, resourceLocation);
+			String extension = getLoadableFileExtension(loader, fileLocation);
 			if (extension != null) {
-				String root = resourceLocation.substring(0, resourceLocation.length() - extension.length() - 1);
-				return Collections.singleton(new Resolvable(root, profile, extension, loader));
+				String root = fileLocation.substring(0, fileLocation.length() - extension.length() - 1);
+				return Collections.singleton(new Resolvable(null, root, optional, profile,
+						(!extensionHintLocation) ? extension : null, origin, loader));
 			}
 		}
 		throw new IllegalStateException("File extension is not known to any PropertySourceLoader. "
@@ -207,7 +226,21 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 		for (Resolvable resolvable : resolvables) {
 			resolved.addAll(resolve(location, resolvable));
 		}
+		if (resolved.isEmpty()) {
+			assertNonOptionalDirectories(location, resolvables);
+		}
 		return resolved;
+	}
+
+	private void assertNonOptionalDirectories(String location, Set<Resolvable> resolvables) {
+		for (Resolvable resolvable : resolvables) {
+			if (resolvable.isNonOptionalDirectory()) {
+				Resource resource = loadResource(resolvable.getDirectory());
+				ResourceConfigDataLocation resourceLocation = createConfigResourceLocation(location, resolvable,
+						resource);
+				ConfigDataLocationNotFoundException.throwIfDoesNotExist(resourceLocation, resource);
+			}
+		}
 	}
 
 	private List<ResourceConfigDataLocation> resolve(String location, Resolvable resolvable) {
@@ -219,23 +252,22 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 
 	private List<ResourceConfigDataLocation> resolveNonPattern(String location, Resolvable resolvable) {
 		Resource resource = loadResource(resolvable.getResourceLocation());
-		if (resource.exists()) {
-			ResourceConfigDataLocation resolved = createConfigResourceLocation(location, resolvable, resource);
-			return Collections.singletonList(resolved);
+		if (!resource.exists() && resolvable.isSkippable()) {
+			logSkippingResource(resolvable);
+			return Collections.emptyList();
 		}
-		logSkippingResource(resolvable);
-		return Collections.emptyList();
+		return Collections.singletonList(createConfigResourceLocation(location, resolvable, resource));
 	}
 
 	private List<ResourceConfigDataLocation> resolvePattern(String location, Resolvable resolvable) {
 		validatePatternLocation(resolvable.getResourceLocation());
 		List<ResourceConfigDataLocation> resolved = new ArrayList<>();
 		for (Resource resource : getResourcesFromResourceLocationPattern(resolvable.getResourceLocation())) {
-			if (resource.exists()) {
-				resolved.add(createConfigResourceLocation(location, resolvable, resource));
+			if (!resource.exists() && resolvable.isSkippable()) {
+				logSkippingResource(resolvable);
 			}
 			else {
-				logSkippingResource(resolvable);
+				resolved.add(createConfigResourceLocation(location, resolvable, resource));
 			}
 		}
 		return resolved;
@@ -249,7 +281,7 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 			Resource resource) {
 		String name = String.format("Resource config '%s' imported via location \"%s\"",
 				resolvable.getResourceLocation(), location);
-		return new ResourceConfigDataLocation(name, resource, resolvable.getLoader());
+		return new ResourceConfigDataLocation(name, resource, resolvable.getOrigin(), resolvable.getLoader());
 	}
 
 	private void validatePatternLocation(String resourceLocation) {
@@ -267,7 +299,7 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 		String fileName = resourceLocationPattern.substring(resourceLocationPattern.lastIndexOf("/") + 1);
 		Resource directoryResource = loadResource(directoryPath);
 		if (!directoryResource.exists()) {
-			return EMPTY_RESOURCES;
+			return new Resource[] { directoryResource };
 		}
 		File directory = getDirectory(resourceLocationPattern, directoryResource);
 		File[] subDirectories = directory.listFiles(File::isDirectory);
@@ -311,14 +343,39 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 	 */
 	private static class Resolvable {
 
+		private final String directory;
+
 		private final String resourceLocation;
+
+		private final boolean optional;
+
+		private final String profile;
+
+		private Origin origin;
 
 		private final PropertySourceLoader loader;
 
-		Resolvable(String rootLocation, String profile, String extension, PropertySourceLoader loader) {
+		Resolvable(String directory, String rootLocation, boolean optional, String profile, String extension,
+				Origin origin, PropertySourceLoader loader) {
 			String profileSuffix = (StringUtils.hasText(profile)) ? "-" + profile : "";
-			this.resourceLocation = rootLocation + profileSuffix + "." + extension;
+			this.directory = directory;
+			this.resourceLocation = rootLocation + profileSuffix + ((extension != null) ? "." + extension : "");
+			this.optional = optional;
+			this.profile = profile;
 			this.loader = loader;
+			this.origin = origin;
+		}
+
+		boolean isNonOptionalDirectory() {
+			return !this.optional && this.directory != null;
+		}
+
+		String getDirectory() {
+			return this.directory;
+		}
+
+		boolean isSkippable() {
+			return this.optional || this.directory != null || this.profile != null;
 		}
 
 		boolean isPatternLocation() {
@@ -327,6 +384,10 @@ class ResourceConfigDataLocationResolver implements ConfigDataLocationResolver<R
 
 		String getResourceLocation() {
 			return this.resourceLocation;
+		}
+
+		Origin getOrigin() {
+			return this.origin;
 		}
 
 		PropertySourceLoader getLoader() {

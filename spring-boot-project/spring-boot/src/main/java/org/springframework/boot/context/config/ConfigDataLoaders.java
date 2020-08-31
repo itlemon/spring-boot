@@ -24,6 +24,7 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 
 import org.springframework.boot.logging.DeferredLogFactory;
+import org.springframework.boot.util.Instantiator;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.core.log.LogMessage;
@@ -39,25 +40,33 @@ class ConfigDataLoaders {
 
 	private final Log logger;
 
+	private final ConfigDataLocationNotFoundAction locationNotFoundAction;
+
 	private final List<ConfigDataLoader<?>> loaders;
 
 	private final List<Class<?>> locationTypes;
 
 	/**
 	 * Create a new {@link ConfigDataLoaders} instance.
+	 * @param locationNotFoundAction the action to take if a
+	 * {@link ConfigDataLocationNotFoundException} is thrown
 	 * @param logFactory the deferred log factory
 	 */
-	ConfigDataLoaders(DeferredLogFactory logFactory) {
-		this(logFactory, SpringFactoriesLoader.loadFactoryNames(ConfigDataLoader.class, null));
+	ConfigDataLoaders(DeferredLogFactory logFactory, ConfigDataLocationNotFoundAction locationNotFoundAction) {
+		this(logFactory, locationNotFoundAction, SpringFactoriesLoader.loadFactoryNames(ConfigDataLoader.class, null));
 	}
 
 	/**
 	 * Create a new {@link ConfigDataLoaders} instance.
 	 * @param logFactory the deferred log factory
+	 * @param locationNotFoundAction the action to take if a
+	 * {@link ConfigDataLocationNotFoundException} is thrown
 	 * @param names the {@link ConfigDataLoader} class names instantiate
 	 */
-	ConfigDataLoaders(DeferredLogFactory logFactory, List<String> names) {
+	ConfigDataLoaders(DeferredLogFactory logFactory, ConfigDataLocationNotFoundAction locationNotFoundAction,
+			List<String> names) {
 		this.logger = logFactory.getLog(getClass());
+		this.locationNotFoundAction = locationNotFoundAction;
 		Instantiator<ConfigDataLoader<?>> instantiator = new Instantiator<>(ConfigDataLoader.class,
 				(availableParameters) -> availableParameters.add(Log.class, logFactory::getLog));
 		this.loaders = instantiator.instantiate(names);
@@ -79,24 +88,42 @@ class ConfigDataLoaders {
 	/**
 	 * Load {@link ConfigData} using the first appropriate {@link ConfigDataLoader}.
 	 * @param <L> the config data location type
+	 * @param context the loader context
 	 * @param location the location to load
 	 * @return the loaded {@link ConfigData}
 	 * @throws IOException on IO error
 	 */
-	<L extends ConfigDataLocation> ConfigData load(L location) throws IOException {
-		ConfigDataLoader<L> loader = getLoader(location);
+	<L extends ConfigDataLocation> ConfigData load(ConfigDataLoaderContext context, L location) throws IOException {
+		boolean optional = location instanceof OptionalConfigDataLocation;
+		location = (!optional) ? location : OptionalConfigDataLocation.unwrap(location);
+		return load(context, optional, location);
+	}
+
+	private <L extends ConfigDataLocation> ConfigData load(ConfigDataLoaderContext context, boolean optional,
+			L location) throws IOException {
+		ConfigDataLoader<L> loader = getLoader(context, location);
 		this.logger.trace(LogMessage.of(() -> "Loading " + location + " using loader " + loader.getClass().getName()));
-		return loader.load(location);
+		try {
+			return loader.load(context, location);
+		}
+		catch (ConfigDataLocationNotFoundException ex) {
+			if (optional) {
+				this.logger.trace(LogMessage.format("Skipping missing resource from optional location %s", location));
+				return null;
+			}
+			this.locationNotFoundAction.handle(this.logger, location, ex);
+			return null;
+		}
 	}
 
 	@SuppressWarnings("unchecked")
-	private <L extends ConfigDataLocation> ConfigDataLoader<L> getLoader(L location) {
+	private <L extends ConfigDataLocation> ConfigDataLoader<L> getLoader(ConfigDataLoaderContext context, L location) {
 		ConfigDataLoader<L> result = null;
 		for (int i = 0; i < this.loaders.size(); i++) {
 			ConfigDataLoader<?> candidate = this.loaders.get(i);
 			if (this.locationTypes.get(i).isInstance(location)) {
 				ConfigDataLoader<L> loader = (ConfigDataLoader<L>) candidate;
-				if (loader.isLoadable(location)) {
+				if (loader.isLoadable(context, location)) {
 					if (result != null) {
 						throw new IllegalStateException("Multiple loaders found for location " + location + " ["
 								+ candidate.getClass().getName() + "," + result.getClass().getName() + "]");
@@ -105,7 +132,7 @@ class ConfigDataLoaders {
 				}
 			}
 		}
-		Assert.state(result != null, "No loader found for location '" + location + "'");
+		Assert.state(result != null, () -> "No loader found for location '" + location + "'");
 		return result;
 	}
 

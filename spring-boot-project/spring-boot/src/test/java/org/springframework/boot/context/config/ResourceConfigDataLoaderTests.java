@@ -26,6 +26,7 @@ import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * Tests for {@link ResourceConfigDataLoader}.
@@ -37,11 +38,13 @@ public class ResourceConfigDataLoaderTests {
 
 	private ResourceConfigDataLoader loader = new ResourceConfigDataLoader();
 
+	private ConfigDataLoaderContext loaderContext = mock(ConfigDataLoaderContext.class);
+
 	@Test
 	void loadWhenLocationResultsInMultiplePropertySourcesAddsAllToConfigData() throws IOException {
 		ResourceConfigDataLocation location = new ResourceConfigDataLocation("application.yml",
-				new ClassPathResource("configdata/yaml/application.yml"), new YamlPropertySourceLoader());
-		ConfigData configData = this.loader.load(location);
+				new ClassPathResource("configdata/yaml/application.yml"), null, new YamlPropertySourceLoader());
+		ConfigData configData = this.loader.load(this.loaderContext, location);
 		assertThat(configData.getPropertySources().size()).isEqualTo(2);
 		PropertySource<?> source1 = configData.getPropertySources().get(0);
 		PropertySource<?> source2 = configData.getPropertySources().get(1);
@@ -54,9 +57,9 @@ public class ResourceConfigDataLoaderTests {
 	@Test
 	void loadWhenPropertySourceIsEmptyAddsNothingToConfigData() throws IOException {
 		ResourceConfigDataLocation location = new ResourceConfigDataLocation("testproperties.properties",
-				new ClassPathResource("config/0-empty/testproperties.properties"),
+				new ClassPathResource("config/0-empty/testproperties.properties"), null,
 				new PropertiesPropertySourceLoader());
-		ConfigData configData = this.loader.load(location);
+		ConfigData configData = this.loader.load(this.loaderContext, location);
 		assertThat(configData.getPropertySources().size()).isEqualTo(0);
 	}
 

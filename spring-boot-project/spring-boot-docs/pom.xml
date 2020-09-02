@@ -1255,7 +1255,7 @@
 										<artifactItem>
 											<groupId>org.springframework.boot</groupId>
 											<artifactId>spring-boot-maven-plugin</artifactId>
-											<version>${revision}</version>
+<version>${spring-boot-maven-plugin.version}</version>
 											<classifier>site</classifier>
 											<type>jar</type>
 											<outputDirectory>

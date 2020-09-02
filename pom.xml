@@ -11,6 +11,7 @@
 	<description>Spring Boot Build</description>
 	<properties>
 		<revision>2.2.9.BUILD-SNAPSHOT</revision>
+		<spring-boot-maven-plugin.version>2.2.9.RELEASE</spring-boot-maven-plugin.version>
 		<main.basedir>${basedir}</main.basedir>
 		<disable.checks>true</disable.checks>
 	</properties>

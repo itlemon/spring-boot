@@ -21,6 +21,7 @@
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<maven.compiler.source>${java.version}</maven.compiler.source>
 		<maven.compiler.target>${java.version}</maven.compiler.target>
+		<spring-boot-maven-plugin.version>2.2.9.RELEASE</spring-boot-maven-plugin.version>
 	</properties>
 	<build>
 		<!-- Turn on filtering by default for application properties -->
@@ -189,7 +190,7 @@
 						<dependency>
 							<groupId>org.springframework.boot</groupId>
 							<artifactId>spring-boot-maven-plugin</artifactId>
-							<version>${revision}</version>
+							<version>${spring-boot-maven-plugin.version}</version>
 						</dependency>
 					</dependencies>
 					<executions>
